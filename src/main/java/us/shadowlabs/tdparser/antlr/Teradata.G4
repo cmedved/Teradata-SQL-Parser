@@ -129,7 +129,7 @@ having_qualify_expr
  ;
 
  from_tablefunc_expr
- : K_TABLE OPEN_PAR function_name OPEN_PAR expr_list? CLOSE_PAR
+ : K_TABLE OPEN_PAR function_name OPEN_PAR expr_list? CLOSE_PAR CLOSE_PAR
     /* TODO: Implement the rest of derived tables! */
     K_AS? derived_table_name (OPEN_PAR column_list CLOSE_PAR)?
  ;
@@ -203,7 +203,7 @@ having_qualify_expr
 
  expr
  : literal_value
- | ( ( database_name '.' )? table_name '.' )? column_name
+ | column_name
  | unary_operator expr
  | expr '||' expr
  | expr ( '*' | '/' | '%' ) expr
@@ -219,10 +219,10 @@ having_qualify_expr
  | expr ( K_IS K_NULL | K_IS K_NOT K_NULL | K_NOT K_NULL )
  | expr K_IS K_NOT? expr
  | expr K_NOT? K_BETWEEN expr K_AND expr
- | expr K_NOT? K_IN ( '(' ( select_expr
+ | expr K_NOT? K_IN ( OPEN_PAR ( subquery
                           | expr ( ',' expr )*
-                          )?
-                      ')'
+                          )
+                      CLOSE_PAR
                     | ( database_name '.' )? table_name )
  /*| ( ( K_NOT )? K_EXISTS )? '(' select_stmt ')' */
  | K_CASE expr? ( K_WHEN expr K_THEN expr )+ ( K_ELSE expr )? K_END

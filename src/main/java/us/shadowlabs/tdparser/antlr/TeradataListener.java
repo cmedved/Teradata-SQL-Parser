@@ -1,5 +1,5 @@
-// Generated from src\main\java\u005Cus\shadowlabs\antlr\Teradata.G4 by ANTLR 4.5.3
-package us.shadowlabs.antlr;
+// Generated from src\main\java\u005Cus\shadowlabs\tdparser\antlr\Teradata.G4 by ANTLR 4.5.3
+package us.shadowlabs.tdparser.antlr;
 import org.antlr.v4.runtime.tree.ParseTreeListener;
 
 /**
