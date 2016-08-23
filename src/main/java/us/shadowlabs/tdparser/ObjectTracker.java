@@ -32,38 +32,68 @@ public class ObjectTracker {
         currentScope = currentScope.exitScope(scopeAlias);
     }
 
-    public ObjectInfo resolveTableAlias(String columnName,String tableAlias) {
+    public void addDefaultDatabaseToTables(String defaultDatabase) {
+        addDefaultDatabaseToTables(defaultDatabase,rootScope);
+    }
+
+    private void addDefaultDatabaseToTables(String defaultDatabase,ScopeTable scope) {
+        for (ObjectInfo info : scope.objectInfoList) {
+            if (info.columnName == null && info.tableName != null && info.databaseName == null) {
+                info.databaseName = defaultDatabase;
+            }
+        }
+        for (ScopeTable subScope : scope.subScopes) {
+            addDefaultDatabaseToTables(defaultDatabase,subScope);
+        }
+    }
+
+    public List<ObjectInfo> resolveTableAlias(String columnName,String tableAlias) {
         logger.trace("Starting to look for column: "+columnName+" with table alias: "+tableAlias);
         return resolveTableAlias(columnName,tableAlias,rootScope);
     }
 
-    private ObjectInfo resolveTableAlias(String columnName,String tableAlias,ScopeTable scope) {
+    private List<ObjectInfo> resolveTableAlias(String columnName,String tableAlias,ScopeTable scope) {
+        List<ObjectInfo> result = new ArrayList<>();
         logger.trace("Looking for column: "+columnName+" tableAlias: "+tableAlias+" scope name: "+scope.scopeAlias);
+        if (columnName.equals("*")) {
+            result.addAll(getStarColumns(tableAlias,scope));
+            return result;
+        }
         if (tableAlias == null) {
             ObjectInfo foundObj = checkObjectsForColumn(columnName,scope);
-            if (foundObj != null) return foundObj;
-            return checkSubScopesForColumn(columnName,scope);
+            if (foundObj != null) {
+                result.add(foundObj);
+                return result; // direct col reference, we're done.
+            }
+            result.addAll(checkSubScopesForColumn(columnName,scope));
+            return result;
             //todo: don't continue
         }
         ObjectInfo tableInfo = scope.getObjectFromTableAlias(tableAlias);
         if (tableInfo != null) {
-            return new ObjectInfo(tableInfo.databaseName,tableInfo.tableName,columnName,null);
+            result.add(new ObjectInfo(tableInfo.databaseName,tableInfo.tableName,columnName,null));
+            return result; // Resolved column directly to table via alias - done.
         } else {
-            return checkSubScopesForColumn(columnName,scope);
+            result.addAll(checkSubScopesForColumn(columnName,scope));
+            return result;
         }
     }
 
-    private ObjectInfo checkSubScopesForColumn(String colName,ScopeTable theScope) {
+    private List<ObjectInfo> checkSubScopesForColumn(String colName,ScopeTable theScope) {
+        List<ObjectInfo> results = new ArrayList<>();
         logger.trace("Checking subscopes for column: "+colName);
-        ObjectInfo foundCol;
+        List<ObjectInfo> foundCols;
         for (ScopeTable scopeTable : theScope.subScopes) {
-            foundCol = scopeTable.getObjectFromColumnAlias(colName);
-            if (foundCol != null) return resolveTableAlias(foundCol.getColumnName(),foundCol.getTableName(),scopeTable);
-            foundCol = scopeTable.getObjectFromColumnName(colName);
+            foundCols = scopeTable.getObjectFromColumnAlias(colName);
+            for (ObjectInfo foundCol : foundCols) {
+                results.addAll(resolveTableAlias(foundCol.columnName,foundCol.tableName,scopeTable));
+            }
+            if (results.size() > 0) return results;
+            ObjectInfo foundCol = scopeTable.getObjectFromColumnName(colName);
             if (foundCol != null) return resolveTableAlias(foundCol.getColumnName(),foundCol.getTableName(),scopeTable);
         }
         logger.trace("Did not find column referenced in subscopes.");
-        return null;
+        return results;
     }
 
     private ObjectInfo checkObjectsForColumn(String colName,ScopeTable theScope) {
@@ -83,6 +113,53 @@ public class ObjectTracker {
         }
         logger.info("Did not find db record for column.");
         return null;
+    }
+
+    private List<ObjectInfo> getStarColumns(String tableName,ScopeTable scope) {
+        logger.trace("Resolving star columns for: "+tableName+".*");
+        List<ObjectInfo> result = new ArrayList<>();
+        if (tableName == null) {
+            for (ObjectInfo obj : scope.objectInfoList) {
+                if (obj.columnName == null) {
+                    List<ColumnDataStore.ColumnRecord> records = ColumnDataStore.getColumns(obj.databaseName,obj.tableName);
+                    for (ColumnDataStore.ColumnRecord rec : records) {
+                        result.add(new ObjectInfo(rec.getDatabaseName(),rec.getTableName(),rec.getColumnName(),null));
+                    }
+                }
+            }
+            for (ScopeTable subScope : scope.subScopes) {
+                if (subScope.scopeAlias != null) {
+                    for (ObjectInfo info : subScope.objectInfoList) {
+                        if (info.getColumnName() != null) {
+                            result.addAll(resolveTableAlias(info.columnName,info.tableName,subScope));
+                        }
+                    }
+                }
+            }
+        }
+        else {
+            ObjectInfo tbl = scope.getObjectFromTableAlias(tableName);
+            if (tbl != null) {
+                logger.trace("Adding all of the columns from table: "+tbl.getTableName());
+                List<ColumnDataStore.ColumnRecord> records = ColumnDataStore.getColumns(tbl.databaseName,tbl.tableName);
+                for (ColumnDataStore.ColumnRecord rec : records) {
+                    result.add(new ObjectInfo(rec.getDatabaseName(),rec.getTableName(),rec.getColumnName(),null));
+                }
+            }
+            else {
+                for (ScopeTable subScope : scope.subScopes) {
+                    if (subScope.scopeAlias != null && subScope.scopeAlias.equalsIgnoreCase(tableName)) {
+                        logger.trace("Adding all columns from subscope: " + subScope.scopeAlias);
+                        for (ObjectInfo info : subScope.objectInfoList) {
+                            if (info.getColumnName() != null) {
+                                result.addAll(resolveTableAlias(info.columnName, info.tableName, subScope));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     public List<ObjectInfo> getRootColumns() {
@@ -168,21 +245,13 @@ public class ObjectTracker {
             return null;
         }
 
-//        public List<ObjectInfo> getObjectFromColumnAlias(String alias) {
-//            List<ObjectInfo> result = new ArrayList<>();
-//            for (ObjectInfo obj : objectInfoList) {
-//                if (obj.aliasName != null && obj.aliasName.equalsIgnoreCase(alias) && obj.columnName != null)
-//                    result.add(obj);
-//            }
-//            return result;
-//        }
-
-        public ObjectInfo getObjectFromColumnAlias(String alias) {
+        public List<ObjectInfo> getObjectFromColumnAlias(String alias) {
+            List<ObjectInfo> result = new ArrayList<>();
             for (ObjectInfo obj : objectInfoList) {
                 if (obj.aliasName != null && obj.aliasName.equalsIgnoreCase(alias) && obj.columnName != null)
-                    return obj;
+                    result.add(obj);
             }
-            return null;
+            return result;
         }
 
         public ObjectInfo getObjectFromColumnName(String name) {

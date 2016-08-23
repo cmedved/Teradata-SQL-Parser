@@ -95,13 +95,119 @@ public class TestSelect {
     }
 
     @Test
-    public void testSelectStar() {
+    public void testFunction() {
+        int i=1;
+        logger.info(""); logger.info("Starting function select test: "+i++);
+        String sql = "SELECT a.col1,a.col2,CAST(a.col3 AS CHAR(9)) Col3 FROM SYSDBA.TestA a;";
+        List<ObjectTracker.ObjectInfo> expectedList = new ArrayList<>();
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","col1",null));
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","col2",null));
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","col3",null));
+        runTest(expectedList,sql,"SYSDBA");
 
+        logger.info(""); logger.info("Starting function select test: "+i++);
+        sql = "SELECT a.col1,SUM( a.col2 + a.col3 ) Col3 FROM SYSDBA.TestA a;";
+        runTest(expectedList,sql,"SYSDBA");
+
+        logger.info(""); logger.info("Starting function select test: "+i++);
+        sql = "SELECT a.col1,SUM(CAST( a.col2 AS INTEGER) + a.col3 ) Col3 FROM SYSDBA.TestA a;";
+        runTest(expectedList,sql,"SYSDBA");
+    }
+
+    @Test
+    public void testSelectStar() {
+        int i=1;
+        logger.info(""); logger.info("Starting select * test: "+i++);
+        String sql = "SELECT a.* FROM SYSDBA.TestA a;";
+        List<ObjectTracker.ObjectInfo> expectedList = new ArrayList<>();
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnOne",null));
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnTwo",null));
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnThree",null));
+        runTest(expectedList,sql,"SYSDBA");
+
+        logger.info(""); logger.info("Starting select * test: "+i++);
+        sql = "SELECT * FROM SYSDBA.TestA a;";
+        runTest(expectedList,sql,"SYSDBA");
+
+        logger.info(""); logger.info("Starting select * test: "+i++);
+        sql = "SELECT a.* FROM SYSDBA.TestA a INNER JOIN SYSDBA.TestB b on a.ColumnOne = b.ColumnOne;";
+        runTest(expectedList,sql,"SYSDBA");
+
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestB","ColumnOne",null));
+
+        logger.info(""); logger.info("Starting select * test: "+i++);
+        sql = "SELECT a.*,b.ColumnOne FROM SYSDBA.TestA a INNER JOIN SYSDBA.TestB b on a.ColumnOne = b.ColumnOne;";
+        runTest(expectedList,sql,"SYSDBA");
+
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestB","ColumnTwo",null));
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestB","ColumnThree",null));
+
+        logger.info(""); logger.info("Starting select * test: "+i++);
+        sql = "SELECT a.*,b.* FROM SYSDBA.TestA a INNER JOIN SYSDBA.TestB b on a.ColumnOne = b.ColumnOne;";
+        runTest(expectedList,sql,"SYSDBA");
+
+        logger.info(""); logger.info("Starting select * test: "+i++);
+        sql = "SELECT * FROM SYSDBA.TestA a INNER JOIN SYSDBA.TestB b on a.ColumnOne = b.ColumnOne;";
+        runTest(expectedList,sql,"SYSDBA");
+
+        logger.info(""); logger.info("Starting select * test: "+i++);
+        sql = "SELECT * FROM SYSDBA.TestA a INNER JOIN (SELECT b.ColumnOne,b.ColumnTwo,b.ColumnThree FROM SYSDBA.TestB b) c on a.ColumnOne = c.ColumnOne;";
+        runTest(expectedList,sql,"SYSDBA");
+
+        logger.info(""); logger.info("Starting select * test: "+i++);
+        sql = "SELECT * FROM SYSDBA.TestA a INNER JOIN (SELECT b.* FROM SYSDBA.TestB b) c on a.ColumnOne = c.ColumnOne;";
+        runTest(expectedList,sql,"SYSDBA");
+
+        logger.info(""); logger.info("Starting select * test: "+i++);
+        sql = "SELECT * FROM SYSDBA.TestA a INNER JOIN (SELECT * FROM SYSDBA.TestB b) c on a.ColumnOne = c.ColumnOne;";
+        runTest(expectedList,sql,"SYSDBA");
+    }
+
+    @Test
+    public void testCaseStatement() {
+        int i=1;
+        logger.info(""); logger.info("Starting select * test: "+i++);
+        String sql = "SELECT CASE WHEN a.ColumnOne = 1 THEN a.ColumnOne ELSE a.ColumnTwo END As ColumnOne FROM SYSDBA.TestA a;";
+        List<ObjectTracker.ObjectInfo> expectedList = new ArrayList<>();
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnOne",null));
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnTwo",null));
+        runTest(expectedList,sql,"SYSDBA");
+
+        logger.info(""); logger.info("Starting select * test: "+i++);
+        sql = "SELECT CASE WHEN a.ColumnOne = 1 THEN a.ColumnOne WHEN 1=2 THEN b.ColumnOne ELSE a.ColumnTwo END As ColumnOne FROM SYSDBA.TestA a, SYSDBA.TestB b;";
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestB","ColumnOne",null));
+        runTest(expectedList,sql,"SYSDBA");
+    }
+
+    @Test
+    public void testSelfJoin() {
+        int i=1;
+        logger.info(""); logger.info("Starting select * test: "+i++);
+        String sql = "SELECT * FROM SYSDBA.TestA a;";
+        List<ObjectTracker.ObjectInfo> expectedList = new ArrayList<>();
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnOne",null));
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnTwo",null));
+        runTest(expectedList,sql,"SYSDBA");
     }
 
     @Test
     public void testDefaultDatabase() {
+        int i=1;
+        logger.info(""); logger.info("Starting default database test: "+i++);
+        String sql = "SELECT * FROM TestA a;";
+        List<ObjectTracker.ObjectInfo> expectedList = new ArrayList<>();
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnOne",null));
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnTwo",null));
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnThree",null));
+        runTest(expectedList,sql,"SYSDBA");
 
+        logger.info(""); logger.info("Starting default database test: "+i++);
+        sql = "SELECT ColumnOne,ColumnTwo,ColumnThree FROM TestA a;";
+        runTest(expectedList,sql,"SYSDBA");
+
+        logger.info(""); logger.info("Starting default database test: "+i++);
+        sql = "SELECT a.ColumnOne,a.ColumnTwo,a.ColumnThree FROM SYSDBA.TestB b,TestA a;";
+        runTest(expectedList,sql,"SYSDBA");
     }
 
     private void runTest(List<ObjectTracker.ObjectInfo> expectedList,String sql,String defaultDatabase) {

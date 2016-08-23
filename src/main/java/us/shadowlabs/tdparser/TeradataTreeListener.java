@@ -92,8 +92,8 @@ public class TeradataTreeListener extends TeradataBaseListener {
     public List<ObjectTracker.ObjectInfo> getResolvedColumns() {
         List<ObjectTracker.ObjectInfo> resolvedCols = new ArrayList<>();
         for (ObjectTracker.ObjectInfo col : tracker.getRootColumns()) {
-            ObjectTracker.ObjectInfo resolvedCol = tracker.resolveTableAlias(col.getColumnName(),col.getTableName());
-            if (resolvedCol != null) resolvedCols.add(resolvedCol);
+            List<ObjectTracker.ObjectInfo> resolvedCol = tracker.resolveTableAlias(col.getColumnName(),col.getTableName());
+            if (resolvedCol != null) resolvedCols.addAll(resolvedCol);
             else System.err.println("WARN: got a null resolved col for: "+col.getTableName()+"."+col.getColumnName());
         }
         return resolvedCols;
@@ -135,51 +135,13 @@ public class TeradataTreeListener extends TeradataBaseListener {
 //        builder.append("Exiting select list...");
 //        builder.append(System.lineSeparator());
         inSelect = false;
+        if (ctx.STAR() != null)
+            tracker.addObject(null,null,"*",null);
     }
 
-//    @Override
-//    public void exitColumn_name(TeradataParser.Column_nameContext ctx) {
-//        if (!inSelect) return;
-//        String databaseName=null,tableName=null,columnName=ctx.IDENTIFIER().getText();
-//        TeradataParser.Table_nameContext tableCtx = ctx.table_name();
-//        TeradataParser.Database_nameContext dbCtx = null;
-//        if (tableCtx != null) {
-//            dbCtx = tableCtx.database_name();
-//        }
-//        if (tableCtx != null) tableName = tableCtx.IDENTIFIER().getText();
-//        if (dbCtx != null) databaseName = dbCtx.IDENTIFIER().getText();
-//        if (lastSelectAlias.size() > 0) {
-//            tracker.addObject(databaseName,tableName,columnName,lastSelectAlias.get(lastSelectAlias.size()-1));
-//        } else {
-//            tracker.addObject(databaseName,tableName,columnName,null);
-//        }
-//    }
 
     @Override
     public void exitColumn_name(TeradataParser.Column_nameContext ctx) {
-//        if (!inSelect) return;
-//        String databaseName=null,tableName=null,columnName=ctx.IDENTIFIER().getText();
-//        TeradataParser.Table_nameContext tableCtx = ctx.table_name();
-//        TeradataParser.Database_nameContext dbCtx = null;
-//        if (tableCtx != null) {
-//            dbCtx = tableCtx.database_name();
-//        }
-//        if (tableCtx != null) tableName = tableCtx.IDENTIFIER().getText();
-//        if (dbCtx != null) databaseName = dbCtx.IDENTIFIER().getText();
-//
-//        String alias = null;
-//        ParserRuleContext parent = ctx.getParent();
-//        while (parent != null && alias == null) {
-//            if (parent instanceof TeradataParser.Select_list_exprContext) {
-//                TeradataParser.Select_list_exprContext selCtx = (TeradataParser.Select_list_exprContext)parent;
-//                System.out.println(selCtx.expr_alias_name());
-//                if (selCtx.expr_alias_name() != null) {
-//                    alias = selCtx.expr_alias_name().IDENTIFIER().getText();
-//                }
-//            }
-//            parent = parent.getParent();
-//        }
-//        tracker.addObject(databaseName,tableName,columnName,alias);
     }
 
     @Override
@@ -195,7 +157,10 @@ public class TeradataTreeListener extends TeradataBaseListener {
 
     @Override
     public void exitSelect_list_expr(TeradataParser.Select_list_exprContext ctx) {
-        //lastSelectAlias.remove(lastSelectAlias.size()-1);
+        if (ctx.STAR() != null) {
+            tracker.addObject(null,ctx.table_name().IDENTIFIER().getText(),"*",null);
+            return;
+        }
         String alias = null;
         if (ctx.expr_alias_name() != null) {
             alias = ctx.expr_alias_name().IDENTIFIER().getText();
@@ -218,7 +183,6 @@ public class TeradataTreeListener extends TeradataBaseListener {
                 }
                 if (tableCtx != null) tableName = tableCtx.IDENTIFIER().getText();
                 if (dbCtx != null) databaseName = dbCtx.IDENTIFIER().getText();
-                System.out.println("ADDING "+databaseName+"."+tableName+"."+columnName+" with alias "+aliasName);
                 tracker.addObject(databaseName,tableName,columnName,aliasName);
             }
             if (child instanceof ParserRuleContext) {

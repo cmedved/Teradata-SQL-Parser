@@ -57,7 +57,7 @@ error
  ;
 
 insert_stmt
- : (K_INSERT|K_INS) K_INTO? table_name
+ : (K_INSERT|K_INS) K_INTO? table_name insert_sub_expr
  ;
 
 insert_sub_expr
@@ -219,9 +219,9 @@ having_qualify_expr
  | expr ( K_IS K_NULL | K_IS K_NOT K_NULL | K_NOT K_NULL )
  | expr K_IS K_NOT? expr
  | expr K_NOT? K_BETWEEN expr K_AND expr
- | expr K_NOT? K_IN ( OPEN_PAR ( subquery
+ | expr K_NOT? K_IN ( OPEN_PAR ( select_expr
                           | expr ( ',' expr )*
-                          )
+                          )?
                       CLOSE_PAR
                     | ( database_name '.' )? table_name )
  /*| ( ( K_NOT )? K_EXISTS )? '(' select_stmt ')' */
@@ -1233,6 +1233,7 @@ name
 
 function_name
  : IDENTIFIER
+ | keyword /* todo: Should not do this. But some keywords are functions... a lot actually. */
  ;
 
 database_name
@@ -1251,8 +1252,8 @@ correlation_name
  : IDENTIFIER
  ;
 
-type_name
- : types (OPEN_PAR (STRING_LITERAL|INTEGER|',')+ CLOSE_PAR)?
+type_name /* todo: this is wrong. NUM should be INTEGER... does not work for some reason. */
+ : types (OPEN_PAR (STRING_LITERAL | NUMERIC_LITERAL | ',')+ CLOSE_PAR)?
  ;
 
 types

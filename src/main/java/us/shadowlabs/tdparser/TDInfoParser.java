@@ -51,20 +51,17 @@ public class TDInfoParser {
             parser.parse();
             //System.out.println(ls);
 
+            tracker = ls.getTracker();
+
+            tracker.addDefaultDatabaseToTables(defaultDatabase);
 
             colList = ls.getResolvedColumns();
             tblList = ls.getTables();
             colRecord = new ArrayList<>();
 
-            for (ObjectTracker.ObjectInfo col : colList) {
-                if (col.getDatabaseName() == null) {
-                    col.setDatabaseName(defaultDatabase);
-                }
-            }
             for (ObjectTracker.ObjectInfo tbl : tblList) {
                 colRecord.addAll(ColumnDataStore.getColumns(tbl.getDatabaseName(),tbl.getTableName()));
             }
-            tracker = ls.getTracker();
             success = true;
         } catch (IOException e) {
             e.printStackTrace();

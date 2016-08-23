@@ -9,3 +9,9 @@ CREATE TABLE DBC.COLUMNSV
 );
 
 INSERT INTO DBC.COLUMNSV(DatabaseName,TableName,ColumnName) VALUES ('PDCRINFO','DBQLSqlTbl_Hst','SqlTextInfo');
+INSERT INTO DBC.COLUMNSV(DatabaseName,TableName,ColumnName) VALUES ('SYSDBA','TestA','ColumnOne');
+INSERT INTO DBC.COLUMNSV(DatabaseName,TableName,ColumnName) VALUES ('SYSDBA','TestA','ColumnTwo');
+INSERT INTO DBC.COLUMNSV(DatabaseName,TableName,ColumnName) VALUES ('SYSDBA','TestA','ColumnThree');
+INSERT INTO DBC.COLUMNSV(DatabaseName,TableName,ColumnName) VALUES ('SYSDBA','TestB','ColumnOne');
+INSERT INTO DBC.COLUMNSV(DatabaseName,TableName,ColumnName) VALUES ('SYSDBA','TestB','ColumnTwo');
+INSERT INTO DBC.COLUMNSV(DatabaseName,TableName,ColumnName) VALUES ('SYSDBA','TestB','ColumnThree');
