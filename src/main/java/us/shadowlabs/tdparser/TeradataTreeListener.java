@@ -142,6 +142,16 @@ public class TeradataTreeListener extends TeradataBaseListener {
 
     @Override
     public void exitColumn_name(TeradataParser.Column_nameContext ctx) {
+        String tableName = null;
+        String columnName = ctx.IDENTIFIER().getText();
+        String databaseName = null;
+        if (ctx.table_name() != null) {
+            tableName = ctx.table_name().IDENTIFIER().getText();
+            if (ctx.table_name().database_name() != null) {
+                databaseName = ctx.table_name().database_name().IDENTIFIER().getText();
+            }
+        }
+        tracker.addObject(databaseName,tableName,columnName,null);
     }
 
     @Override

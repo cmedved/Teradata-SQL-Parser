@@ -67,6 +67,8 @@ public class TestSelect {
         expectedList.add(new ObjectTracker.ObjectInfo("PDCRINFO","DBQLogTbl_Hst","LogDate",null));
         expectedList.add(new ObjectTracker.ObjectInfo("PDCRINFO","DBQLogTbl_Hst","QueryId",null));
         expectedList.add(new ObjectTracker.ObjectInfo("PDCRINFO","DBQLSqlTbl_Hst","SqlTextInfo",null));
+        expectedList.add(new ObjectTracker.ObjectInfo("PDCRINFO","DBQLSqlTbl_Hst","LogDate",null));
+        expectedList.add(new ObjectTracker.ObjectInfo("PDCRINFO","DBQLSqlTbl_Hst","QueryId",null));
         runTest(expectedList,sql,"SYSDBA");
 
         logger.info(""); logger.info("Starting derived select test: "+i++);
@@ -129,11 +131,11 @@ public class TestSelect {
         sql = "SELECT * FROM SYSDBA.TestA a;";
         runTest(expectedList,sql,"SYSDBA");
 
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestB","ColumnOne",null));
+
         logger.info(""); logger.info("Starting select * test: "+i++);
         sql = "SELECT a.* FROM SYSDBA.TestA a INNER JOIN SYSDBA.TestB b on a.ColumnOne = b.ColumnOne;";
         runTest(expectedList,sql,"SYSDBA");
-
-        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestB","ColumnOne",null));
 
         logger.info(""); logger.info("Starting select * test: "+i++);
         sql = "SELECT a.*,b.ColumnOne FROM SYSDBA.TestA a INNER JOIN SYSDBA.TestB b on a.ColumnOne = b.ColumnOne;";
@@ -166,14 +168,14 @@ public class TestSelect {
     @Test
     public void testCaseStatement() {
         int i=1;
-        logger.info(""); logger.info("Starting select * test: "+i++);
+        logger.info(""); logger.info("Starting case statement test: "+i++);
         String sql = "SELECT CASE WHEN a.ColumnOne = 1 THEN a.ColumnOne ELSE a.ColumnTwo END As ColumnOne FROM SYSDBA.TestA a;";
         List<ObjectTracker.ObjectInfo> expectedList = new ArrayList<>();
         expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnOne",null));
         expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnTwo",null));
         runTest(expectedList,sql,"SYSDBA");
 
-        logger.info(""); logger.info("Starting select * test: "+i++);
+        logger.info(""); logger.info("Starting case statement test: "+i++);
         sql = "SELECT CASE WHEN a.ColumnOne = 1 THEN a.ColumnOne WHEN 1=2 THEN b.ColumnOne ELSE a.ColumnTwo END As ColumnOne FROM SYSDBA.TestA a, SYSDBA.TestB b;";
         expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestB","ColumnOne",null));
         runTest(expectedList,sql,"SYSDBA");
@@ -182,11 +184,12 @@ public class TestSelect {
     @Test
     public void testSelfJoin() {
         int i=1;
-        logger.info(""); logger.info("Starting select * test: "+i++);
+        logger.info(""); logger.info("Starting self join test: "+i++);
         String sql = "SELECT * FROM SYSDBA.TestA a;";
         List<ObjectTracker.ObjectInfo> expectedList = new ArrayList<>();
         expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnOne",null));
         expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnTwo",null));
+        expectedList.add(new ObjectTracker.ObjectInfo("SYSDBA","TestA","ColumnThree",null));
         runTest(expectedList,sql,"SYSDBA");
     }
 
@@ -238,6 +241,14 @@ public class TestSelect {
             for (ObjectTracker.ObjectInfo expected : expectedList) {
                 found = found || expected.equals(actual);
             }
+            if (!found) {
+                logger.info("Column Results ----------------------------");
+                for (ObjectTracker.ObjectInfo col : infoList) {
+                    logger.info(col);
+                }
+                logger.info("\n"+parser.getTracker());
+            }
+            logger.info("Got column? "+found+ " | "+actual);
             Assert.assertTrue("Test failed - did not get column (extra column identified): "+actual,found);
         }
     }
