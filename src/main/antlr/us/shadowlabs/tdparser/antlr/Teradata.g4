@@ -31,8 +31,147 @@ error
  ;
 
  sql_stmt
+ : ddl_stmt
+ | dml_stmt
+ | set_stmt
+ ;
+
+ ddl_stmt
+ : create_procedure
+ ;
+
+ dml_stmt
  : select_stmt
  | insert_stmt
+ | update_stmt
+ | call_stmt
+ ;
+
+ create_procedure
+ : (K_CREATE | K_REPLACE) K_PROCEDURE (uid | full_uid) (proc_param_list)?
+   (block_stmt | sql_stmt)
+ ;
+
+ block_stmt
+ : (uid ':')? K_BEGIN
+   (
+     declare_stmt*
+     proc_sql_stmt+
+   )?
+   K_END (uid)?
+ ;
+
+ proc_param_list
+ : OPEN_PAR proc_parameter (COMMA proc_parameter)* CLOSE_PAR
+ ;
+
+ proc_parameter
+ : (K_IN | K_OUT | K_INOUT) uid data_type
+ ;
+
+ proc_sql_stmt
+ : (compound_stmt | sql_stmt) ';'
+ ;
+
+ compound_stmt
+ : block_stmt
+ | case_stmt
+ | cursor_stmt
+ | for_stmt
+ | if_stmt
+ | leave_stmt
+ | loop_stmt
+ | repeat_stmt
+ | while_stmt
+ ;
+
+ /* TODO: check correctness (multiple statements line2? uid for for loop? CURSOR required?)*/
+ for_stmt
+ : K_FOR uid K_AS (uid K_CURSOR K_FOR)? select_stmt K_DO
+   proc_sql_stmt+
+   K_END K_FOR
+ ;
+
+ while_stmt
+ : (uid ':')?
+   K_WHILE expr
+   K_DO proc_sql_stmt+
+   K_END K_WHILE uid?
+ ;
+
+ repeat_stmt
+ : (uid ':')?
+   K_REPEAT proc_sql_stmt+
+   K_UNTIL expr
+   K_END K_REPEAT uid?
+ ;
+
+ leave_stmt
+ : K_LEAVE uid?
+ ;
+
+ loop_stmt
+ : (uid ':')?
+   K_LOOP proc_sql_stmt+
+   K_END K_LOOP uid?
+ ;
+
+ case_stmt
+ : K_CASE (uid | expr)? case_when_then
+   (K_ELSE proc_sql_stmt+)?
+   K_END K_CASE
+ ;
+
+ case_when_then
+ : K_WHEN (name | expr)
+   K_THEN proc_sql_stmt+
+ ;
+
+ if_stmt
+ : K_IF expr
+   K_THEN proc_sql_stmt+
+   elif_stmt*
+   (K_ELSE proc_sql_stmt+)?
+   K_END K_IF
+ ;
+
+ elif_stmt
+ : K_ELSEIF expr
+   K_THEN proc_sql_stmt
+ ;
+
+ declare_stmt
+ : (declare_value | declare_handler | declare_cursor) ';'
+ ;
+
+ declare_value
+ : K_DECLARE uid data_type (K_DEFAULT literal_value)?
+ | K_DECLARE uid (COMMA uid)* data_type
+ ;
+
+ declare_handler
+ : K_DECLARE (K_CONTINUE | K_EXIT | K_UNDO) K_HANDLER K_FOR
+   handler_value (COMMA handler_value)*
+   (block_stmt | sql_stmt)
+ ;
+
+ declare_cursor
+ : K_DECLARE uid K_CURSOR K_FOR select_stmt
+ ;
+
+ cursor_stmt
+ : K_CLOSE uid                                                     #CloseCursor
+ | K_FETCH (K_NEXT? K_FROM)? uid K_INTO uid (COMMA uid)*           #FetchCursor
+ | K_OPEN uid                                                      #OpenCursor
+ ;
+
+ handler_value
+ : literal_value
+ | SQLSTATE K_VALUE? STRING_LITERAL
+ | uid
+ | K_SQLWARNING
+ | K_NOT K_FOUND
+ | K_SQLEXCEPTION
  ;
 
  select_stmt
@@ -43,6 +182,7 @@ error
  | select_expr
  ;
 
+ /* TODO: implementation for SELECT __ INTO __ */
  select_expr
  : (K_SELECT | K_SEL) (((K_DISTINCT|K_ALL|normalize_expr) ((table_name DOT STAR DOT K_ALL)|(column_name DOT K_ALL))?)|top_expr)?
     select_list
@@ -51,11 +191,13 @@ error
     where_clause?
     (K_GROUP K_BY group_by_list)?
     having_qualify_expr?
+    sample_expr?
     /* TODO: sample_expr? */
     /* TODO: expand_expr? */
     (K_ORDER K_BY order_by_list (K_ASC|K_DESC)? (K_NULLS K_FIRST| K_NULLS K_LAST)?)?
  ;
 
+/* TODO: using variables to replace literal column names */
 insert_stmt
  : (K_INSERT|K_INS) K_INTO? table_name insert_sub_expr
  ;
@@ -67,8 +209,8 @@ insert_sub_expr
  | K_DEFAULT K_VALUES
  ;
 
-insert_logging_errors /* Not sure if NUMERIC_LITERAL is correct */
- : K_LOGGING K_ALL? K_ERRORS (K_WITH (K_NO K_LIMIT|K_LIMIT K_OF NUMERIC_LITERAL))?
+insert_logging_errors
+ : K_LOGGING K_ALL? K_ERRORS (K_WITH (K_NO K_LIMIT|K_LIMIT K_OF numeric_literal))?
  ;
 
 top_expr
@@ -157,7 +299,7 @@ having_qualify_expr
  ;
 
  sample_expr
- :
+ : K_SAMPLE INTEGER
  ;
 
  expand_expr
@@ -200,9 +342,34 @@ having_qualify_expr
  : (K_SELECT | K_SEL) (K_DISTINCT|K_ALL)? select_list
  ;*/
 
+ call_stmt
+ : K_CALL uid
+   (OPEN_PAR (literal_value | expr)? CLOSE_PAR )?
+ ;
+
+ update_stmt
+ : (single_update_stmt)
+ ;
+
+ single_update_stmt
+ : K_UPDATE table_name (K_AS? uid)?
+   K_SET updated_element (COMMA updated_element)*
+   (K_WHERE expr)? (K_ORDER K_BY order_by_list)?
+ ;
+
+ /* TODO: multiple_update_stmt to update multiple tbls incl. joined tbls */
+
+ updated_element
+ : column_name '=' (expr | K_DEFAULT)
+ ;
+
+ set_stmt
+ : K_SET uid '=' expr
+ ;
 
  expr
  : literal_value
+ | (SQLCODE | SQLSTATE | ACTIVITY_COUNT)
  | column_name
  | unary_operator expr
  | expr '||' expr
@@ -275,11 +442,11 @@ expr_list
   ;
 
  signed_number
-  : ( '+' | '-' )? NUMERIC_LITERAL
+  : ( '+' | '-' )? numeric_literal
   ;
 
  literal_value
-  : NUMERIC_LITERAL
+  : numeric_literal
   | STRING_LITERAL
   | K_NULL
   | K_CURRENT_TIME
@@ -289,6 +456,10 @@ expr_list
   | time_expr
   | timestamp_expr
   ;
+
+ numeric_literal
+ : (INTEGER | DECIMAL | SCIENTIFIC)
+ ;
 
  unary_operator
   : '-'
@@ -1227,6 +1398,18 @@ K_LAST : L A S T;
 K_NULLS : N U L L S;
 K_ERRORS : E R R O R S;
 
+SQLSTATE : S Q L S T A T E;
+SQLCODE : S Q L C O D E;
+ACTIVITY_COUNT : A C T I V I T Y '_' C O U N T;
+
+full_uid
+ : uid DOT uid
+ ;
+
+uid
+ : IDENTIFIER
+ ;
+
 name
  : any_name
  ;
@@ -1252,11 +1435,26 @@ correlation_name
  : IDENTIFIER
  ;
 
-type_name /* todo: this is wrong. NUM should be INTEGER... does not work for some reason. */
- : types (OPEN_PAR (STRING_LITERAL | NUMERIC_LITERAL | ',')+ CLOSE_PAR)?
+data_type
+ : (K_CHAR | K_CHARACTER | K_VARCHAR) (length_1d)? //TODO: Add charset?
+ | (K_BIGINT | K_INT | K_INTEGER | K_SMALLINT)
+ | (K_DEC | K_DECIMAL | K_DOUBLE | K_FLOAT | K_NUMERIC) (length_2d)?
+ | (K_DATE | K_TIME | K_TIMESTAMP) (length_1d)?
  ;
 
-types
+length_1d
+ : OPEN_PAR INTEGER CLOSE_PAR
+ ;
+
+length_2d
+ : OPEN_PAR INTEGER COMMA INTEGER CLOSE_PAR
+ ;
+
+type_name /* todo: this is wrong. NUM should be INTEGER... does not work for some reason. */
+ : type (OPEN_PAR (STRING_LITERAL | INTEGER | ',')+ CLOSE_PAR)?
+ ;
+
+type
  : K_DATE | K_TIME | K_TIMESTAMP | K_INTEGER | K_DEC | K_DECIMAL | K_CHAR | K_CHARACTER | K_VARCHAR
  | K_FLOAT | K_INT | K_SMALLINT | K_BIGINT | K_BLOB | K_VARBYTE | K_BYTE | K_BYTEINT | K_NUMERIC | K_DOUBLE | K_CURSOR
  ;
@@ -1268,22 +1466,16 @@ any_name
  | '(' any_name ')'
  ;
 
-NUMERIC_LITERAL
- : INTEGER
- | DECIMAL
- | SCIENTIFIC
- ;
-
 INTEGER
- : [0-9]+
+ : DIGIT+
  ;
 
 DECIMAL
- : [0-9] '.' [0-9]*
+ : DIGIT+ '.' DIGIT*
  ;
 
 SCIENTIFIC
- : [0-9] E [0-9]+
+ : DIGIT E DIGIT+
  ;
 
 IDENTIFIER
@@ -1296,7 +1488,6 @@ IDENTIFIER
 STRING_LITERAL
  : '\'' ( ~'\'' | '\'\'' )* '\''
  ;
-
 
 SINGLE_LINE_COMMENT
  : '--' ~[\r\n]* -> channel(HIDDEN)
@@ -1313,7 +1504,7 @@ SPACES
 UNEXPECTED_CHAR
  : .
  ;
- 
+
 fragment DIGIT : [0-9];
 fragment A : [aA];
 fragment B : [bB];
