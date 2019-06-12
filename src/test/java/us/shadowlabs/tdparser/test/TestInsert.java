@@ -15,11 +15,6 @@ public class TestInsert {
     public void testBasicInsert() {
         logger.info(""); logger.info("Starting basic insert test.");
         String sql = "INSERT INTO SYSDBA.SomeTbl SELECT logtbl.LogDate,logtbl.QueryId FROM PDCRINFO.DBQLogTbl_Hst logtbl WHERE logtbl.LogDate = CURRENT_DATE-1;";
-        runTest(sql);
-    }
-
-    private void runTest(String sql) {
-        TDInfoParser parser = new TDInfoParser(sql);
-        parser.parse();
+        TestUtil.runTest(sql);
     }
 }

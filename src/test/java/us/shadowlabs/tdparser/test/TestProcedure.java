@@ -22,7 +22,7 @@ public class TestProcedure {
                     "BEGIN\n" +
                         "SELECT * FROM SYSDBA.TestA a;\n" +
                     "END;";
-        runTest(sql);
+        TestUtil.runTest(sql);
     }
 
     @Test
@@ -35,7 +35,7 @@ public class TestProcedure {
                             "SELECT * FROM SYSDBA.TestB;\n" +
                         "END;\n" +
                     "END;";
-        runTest(sql);
+        TestUtil.runTest(sql);
     }
 
     @Test
@@ -45,7 +45,7 @@ public class TestProcedure {
                     "XYZ1: BEGIN\n" +
                         "INSERT INTO TheTable (ALPHA, BETA, 'Gamma');\n" +
                     "END XYZ1;\n";
-        runTest(sql);
+        TestUtil.runTest(sql);
     }
 
 
@@ -61,7 +61,7 @@ public class TestProcedure {
                             "SELECT * FROM SYSDBA.TestB;\n" +
                         "END;\n" +
                     "END;";
-        runTest(sql);
+        TestUtil.runTest(sql);
     }
 
     @Test (expected = ParseCancellationException.class)
@@ -77,7 +77,7 @@ public class TestProcedure {
                         "END;\n" +
                     "END;";
         try {
-            runTest(sql);
+            TestUtil.runTest(sql);
         } catch (ParseCancellationException ex) {
             Assert.assertTrue(ex.getMessage().toString().contains("extraneous input 'DECLARE'"));
             throw ex;
@@ -87,17 +87,17 @@ public class TestProcedure {
     /*TODO: readd :SQLSTATE instead of A_SQLSTATE once variable usage added to INSERT statements */
     @Test
     public void testComplexProcedure() {
-        String sql = loadSqlFromFile("test_procedure.sql");
-        runTest(sql);
+        String sql = TestUtil.loadSqlFromFile(this, "test_procedure.sql");
+        TestUtil.runTest(sql);
     }
 
     @Test
     public void testPerformanceOfParser() {
-        String sql = loadSqlFromFile("test_procedure.sql");
-        int repeatCount = 5000;
+        String sql = TestUtil.loadSqlFromFile(this, "test_procedure.sql");
+        int repeatCount = 0;
         long startTime = System.currentTimeMillis();
         for (int i=0; i<repeatCount; i++){
-            runTest(sql);
+            TestUtil.runTest(sql);
         }
         long endTime = System.currentTimeMillis();
         long totalTime = endTime - startTime;
@@ -105,16 +105,9 @@ public class TestProcedure {
         System.out.format("Time taken to parse %,d lines: %d millis", numLines, totalTime);
     }
 
-    private String loadSqlFromFile(String filename) {
-        ClassLoader classLoader = getClass().getClassLoader();
-        InputStream inputStream = classLoader.getResourceAsStream(filename);
-        InputStreamReader streamReader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
-        BufferedReader reader = new BufferedReader(streamReader);
-        return reader.lines().collect(Collectors.joining("\n"));
-    }
-
-    private void runTest(String sql) {
-        TDInfoParser parser = new TDInfoParser(sql);
-        parser.parse();
+    @Test
+    public void testCommentParsing() {
+        String sql = TestUtil.loadSqlFromFile(this, "test_comments.sql");
+        TestUtil.runTest(sql);
     }
 }
