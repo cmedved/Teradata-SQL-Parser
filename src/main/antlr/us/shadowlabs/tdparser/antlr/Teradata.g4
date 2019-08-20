@@ -16,7 +16,7 @@
 grammar Teradata;
 
 parse
- : ( sql_stmt_list | error ) EOF
+ : ( sql_stmt_list | comment | error ) EOF
  ;
 
 error
@@ -27,52 +27,199 @@ error
  ;
 
  sql_stmt_list
- :  (sql_stmt ';')+
+ : (sql_stmt ';' comment)+
  ;
 
  sql_stmt
+ : ddl_stmt
+ | dml_stmt
+ | set_stmt
+ ;
+
+ ddl_stmt
+ : create_procedure
+ ;
+
+ dml_stmt
  : select_stmt
  | insert_stmt
+ | update_stmt
+ | call_stmt
+ ;
+
+ create_procedure
+ : comment (K_CREATE | K_REPLACE) comment K_PROCEDURE (uid | full_uid) (proc_param_list)?
+   (block_stmt | sql_stmt)
+ ;
+
+ block_stmt
+ : (uid ':')? comment K_BEGIN comment
+   (
+     declare_stmt*
+     proc_sql_stmt+
+   )?
+   K_END comment (uid)?
+ ;
+
+ proc_param_list
+ : comment OPEN_PAR proc_parameter (COMMA proc_parameter)* CLOSE_PAR comment
+ ;
+
+ proc_parameter
+ : comment (K_IN | K_OUT | K_INOUT) uid data_type
+ ;
+
+ proc_sql_stmt
+ : (compound_stmt | sql_stmt) ';' comment
+ ;
+
+ compound_stmt
+ : block_stmt
+ | case_stmt
+ | cursor_stmt
+ | for_stmt
+ | if_stmt
+ | leave_stmt
+ | loop_stmt
+ | repeat_stmt
+ | while_stmt
+ ;
+
+ /* TODO: check correctness (multiple statements line2? uid for for loop? CURSOR required?)*/
+ for_stmt
+ : comment K_FOR uid K_AS (uid K_CURSOR comment K_FOR)? select_stmt K_DO
+   proc_sql_stmt+
+   K_END comment K_FOR comment
+ ;
+
+ while_stmt
+ : (uid ':')? comment
+   K_WHILE expr
+   K_DO proc_sql_stmt+
+   K_END comment K_WHILE uid?
+ ;
+
+ repeat_stmt
+ : (uid ':')? comment
+   K_REPEAT proc_sql_stmt+
+   K_UNTIL expr
+   K_END comment K_REPEAT uid?
+ ;
+
+ leave_stmt
+ : comment K_LEAVE uid?
+ ;
+
+ loop_stmt
+ : (uid ':')? comment
+   K_LOOP proc_sql_stmt+
+   K_END comment K_LOOP uid?
+ ;
+
+ case_stmt
+ : comment K_CASE (uid | expr)? case_when_then
+   (K_ELSE proc_sql_stmt+)?
+   K_END comment K_CASE
+ ;
+
+ case_when_then
+ : comment K_WHEN (name | expr)
+   K_THEN proc_sql_stmt+
+ ;
+
+ if_stmt
+ : comment K_IF expr
+   K_THEN proc_sql_stmt+
+   elif_stmt*
+   (K_ELSE proc_sql_stmt+)?
+   K_END comment K_IF
+ ;
+
+ elif_stmt
+ : K_ELSEIF expr
+   K_THEN proc_sql_stmt
+ ;
+
+ declare_stmt
+ : (declare_value | declare_handler | declare_cursor) ';'
+ ;
+
+ declare_value
+ : comment K_DECLARE uid data_type (K_DEFAULT literal_value)?
+ | K_DECLARE uid (COMMA uid)* data_type
+ ;
+
+ declare_handler
+ : comment K_DECLARE comment (K_CONTINUE | K_EXIT | K_UNDO) comment K_HANDLER comment K_FOR
+   handler_value (COMMA handler_value)*
+   (block_stmt | sql_stmt)
+ ;
+
+ declare_cursor
+ : comment K_DECLARE uid K_CURSOR comment K_FOR select_stmt
+ ;
+
+ cursor_stmt
+ : comment K_CLOSE uid                                             #CloseCursor
+ | comment K_FETCH comment ((K_NEXT comment)? K_FROM comment)?
+ uid K_INTO uid (COMMA uid)*                                       #FetchCursor
+ | comment K_OPEN uid                                              #OpenCursor
+ ;
+
+ handler_value
+ : literal_value
+ | comment SQLSTATE comment (K_VALUE comment)? STRING_LITERAL comment
+ | uid
+ | comment K_SQLWARNING comment
+ | comment K_NOT comment K_FOUND comment
+ | comment K_SQLEXCEPTION comment
  ;
 
  select_stmt
  : /*(K_WITH K_RECURSIVE query_name (OPEN_PAR column_list CLOSE_PAR)? K_AS
     seed_stmt (K_UNION K_ALL (recursive_stmt|seed_stmt))*) select_expr
-    TODO: Implement recursion...*/
-  K_WITH query_name (OPEN_PAR column_list CLOSE_PAR)? K_AS OPEN_PAR select_expr CLOSE_PAR select_expr
+    TODO: Implement recursion...
+    TODO: Add comment grammar when implementing it. Comments are only needed around simple literals - see examples in some grammar around*/
+  comment K_WITH query_name (OPEN_PAR column_list CLOSE_PAR comment)? K_AS comment OPEN_PAR select_expr CLOSE_PAR select_expr
  | select_expr
  ;
 
+ /* TODO: implementation for SELECT __ INTO __ */
  select_expr
- : (K_SELECT | K_SEL) (((K_DISTINCT|K_ALL|normalize_expr) ((table_name DOT STAR DOT K_ALL)|(column_name DOT K_ALL))?)|top_expr)?
+ : comment
+    (K_SELECT | K_SEL) comment (((K_DISTINCT|K_ALL|normalize_expr)
+        ((table_name comment DOT comment STAR comment DOT comment K_ALL)
+        |(column_name DOT comment K_ALL))?)|top_expr)?
     select_list
     from_clause?
     from_with_expr?
     where_clause?
-    (K_GROUP K_BY group_by_list)?
+    (K_GROUP comment K_BY group_by_list)?
     having_qualify_expr?
+    sample_expr?
     /* TODO: sample_expr? */
     /* TODO: expand_expr? */
-    (K_ORDER K_BY order_by_list (K_ASC|K_DESC)? (K_NULLS K_FIRST| K_NULLS K_LAST)?)?
+    (K_ORDER comment K_BY order_by_list ((K_ASC|K_DESC) comment)? ((K_NULLS comment K_FIRST| K_NULLS comment K_LAST) comment)?)?
  ;
 
+/* TODO: using variables to replace literal column names */
 insert_stmt
- : (K_INSERT|K_INS) K_INTO? table_name insert_sub_expr
+ : comment (K_INSERT|K_INS) comment K_INTO? table_name insert_sub_expr
  ;
 
 insert_sub_expr
- : K_VALUES? OPEN_PAR expr_list CLOSE_PAR
- | OPEN_PAR column_list CLOSE_PAR K_VALUES OPEN_PAR expr_list CLOSE_PAR
- | column_list? subquery insert_logging_errors?
- | K_DEFAULT K_VALUES
+ : comment (K_VALUES comment)? OPEN_PAR expr_list CLOSE_PAR comment
+ | comment OPEN_PAR column_list CLOSE_PAR comment K_VALUES comment OPEN_PAR expr_list CLOSE_PAR comment
+ | comment (column_list | (OPEN_PAR column_list CLOSE_PAR))? subquery insert_logging_errors?
+ | comment K_DEFAULT comment K_VALUES comment
  ;
 
-insert_logging_errors /* Not sure if NUMERIC_LITERAL is correct */
- : K_LOGGING K_ALL? K_ERRORS (K_WITH (K_NO K_LIMIT|K_LIMIT K_OF NUMERIC_LITERAL))?
+insert_logging_errors
+ : comment K_LOGGING comment (K_ALL comment)? K_ERRORS comment (K_WITH comment (K_NO comment K_LIMIT|K_LIMIT comment K_OF numeric_literal))?
  ;
 
 top_expr
- : K_TOP (INTEGER|DECIMAL) K_PERCENT? (K_WITH K_TIES)?
+ : comment K_TOP comment (INTEGER|DECIMAL) comment (K_PERCENT comment)? (K_WITH comment K_TIES comment)?
  ;
 
 having_qualify_expr
@@ -83,19 +230,19 @@ having_qualify_expr
  ;
 
  select_list
- : STAR
+ : comment STAR comment
  | select_list_expr (COMMA select_list_expr)*
  ;
 
  select_list_expr
- : ( (expr (K_AS? expr_alias_name)?) | table_name DOT STAR)
+ : ( (expr (K_AS? expr_alias_name)?)| table_name DOT comment STAR comment)
  ;
 
 
 /* Had to modify this pretty extensively from the SQL guide... the syntax diagram didn't really match up
    with the actual grammar. */
  from_clause
- : K_FROM from_expr
+ : comment K_FROM from_expr
  ;
 
  from_expr
@@ -103,9 +250,11 @@ having_qualify_expr
  ;
 
  as_of
- : K_AS K_OF (date_expr|timestamp_expr)?
- | K_VALIDTIME K_AS K_OF (date_expr|timestamp_expr)? K_AND K_TRANSACTIONTIME K_AS K_OF (date_expr|timestamp_expr)?
- | K_TRANSACTIONTIME K_AS K_OF (date_expr|timestamp_expr)? K_AND K_VALIDTIME K_AS K_OF (date_expr|timestamp_expr)?
+ : comment K_AS comment K_OF comment (date_expr|timestamp_expr)?
+ | comment K_VALIDTIME comment K_AS comment K_OF (date_expr|timestamp_expr)? comment K_AND
+    comment K_TRANSACTIONTIME comment K_AS comment K_OF comment (date_expr|timestamp_expr)?
+ | comment K_TRANSACTIONTIME comment K_AS comment K_OF (date_expr|timestamp_expr)? comment K_AND
+    comment K_VALIDTIME comment K_AS comment K_OF comment (date_expr|timestamp_expr)?
  ;
 
  from_table_expr
@@ -115,49 +264,49 @@ having_qualify_expr
  ;
 
  from_single_expr
- : table_name as_of? (K_AS? correlation_name)?
+ : table_name as_of? ((K_AS comment)? correlation_name)?
  ;
 
  from_join_expr
- : (K_INNER|(K_LEFT|K_RIGHT|K_FULL)K_OUTER?) K_JOIN from_table_expr as_of? K_ON search_condition
- | K_CROSS K_JOIN from_table_expr
+ : (K_INNER|(K_LEFT|K_RIGHT|K_FULL) (comment K_OUTER)?) comment K_JOIN from_table_expr as_of? K_ON search_condition
+ | K_CROSS comment K_JOIN from_table_expr
  | COMMA from_table_expr
  ;
 
  from_derived_expr
- : OPEN_PAR subquery CLOSE_PAR K_AS? derived_table_name (OPEN_PAR column_list CLOSE_PAR)?
+ : comment OPEN_PAR subquery CLOSE_PAR comment K_AS? derived_table_name (OPEN_PAR column_list CLOSE_PAR)?
  ;
 
  from_tablefunc_expr
- : K_TABLE OPEN_PAR function_name OPEN_PAR expr_list? CLOSE_PAR CLOSE_PAR
+ : comment K_TABLE comment OPEN_PAR function_name OPEN_PAR comment expr_list? CLOSE_PAR comment CLOSE_PAR
     /* TODO: Implement the rest of derived tables! */
-    K_AS? derived_table_name (OPEN_PAR column_list CLOSE_PAR)?
+    (K_AS comment)? derived_table_name (OPEN_PAR column_list CLOSE_PAR)?
  ;
 
  from_with_expr
- : K_WITH expr_list (K_BY expr (K_ASC|K_DESC)? (',' expr (K_ASC|K_DESC)?)*)?
+ : comment K_WITH expr_list (K_BY expr ((K_ASC|K_DESC) comment)? (COMMA expr ((K_ASC|K_DESC) comment)?)*)?
  ;
 
  normalize_expr
- : K_NORMALIZE
- | K_NORMALIZE K_ON K_MEETS K_OR K_OVERLAPS
- | K_NORMALIZE K_ON K_OVERLAPS (K_OR K_MEETS)?
+ : comment K_NORMALIZE
+ | comment K_NORMALIZE comment K_ON comment K_MEETS comment K_OR comment K_OVERLAPS
+ | comment K_NORMALIZE comment K_ON comment K_OVERLAPS comment (K_OR comment K_MEETS comment)?
  ;
 
  where_clause
- : K_WHERE search_condition
+ : comment K_WHERE search_condition
  ;
 
  having_expr
- : K_HAVING conditional_expr
+ : comment K_HAVING conditional_expr
  ;
 
  qualify_expr
- : K_QUALIFY search_condition
+ : comment K_QUALIFY search_condition
  ;
 
  sample_expr
- :
+ : comment K_SAMPLE comment INTEGER comment
  ;
 
  expand_expr
@@ -181,55 +330,80 @@ having_qualify_expr
  ;
 
  order_by_val
- : expr
+ : (expr
  | column_name
  | column_alias
- | column_position
+ | column_position) (K_NULLS comment K_LAST comment)?
  ;
 
  seed_stmt
- : (K_SELECT | K_SEL) (K_DISTINCT|K_ALL)? select_list
+ : comment (K_SELECT | K_SEL) comment ((K_DISTINCT|K_ALL) comment)? select_list
     K_FROM from_single_expr | from_join_expr | from_derived_expr
     K_WHERE search_condition /* doc says it has to have WHERE? */
-    (K_GROUP K_BY group_by_list)?
+    (K_GROUP comment K_BY group_by_list)?
     having_qualify_expr?
-    (K_ORDER K_BY order_by_list (K_ASC|K_DESC)?)?
+    (K_ORDER comment K_BY order_by_list ((K_ASC|K_DESC) comment)?)?
  ;
 
  /*recursive_stmt
  : (K_SELECT | K_SEL) (K_DISTINCT|K_ALL)? select_list
  ;*/
 
+ call_stmt
+ : comment K_CALL uid
+   (OPEN_PAR comment (literal_value | expr)? CLOSE_PAR )?
+ ;
+
+ update_stmt
+ : (single_update_stmt)
+ ;
+
+ single_update_stmt
+ : comment K_UPDATE table_name ((K_AS comment)? uid)?
+   K_SET updated_element (COMMA updated_element)*
+   (K_WHERE expr)? (K_ORDER comment K_BY order_by_list)?
+ ;
+
+ /* TODO: multiple_update_stmt to update multiple tbls incl. joined tbls */
+
+ updated_element
+ : column_name ASSIGN (expr | (K_DEFAULT comment))
+ ;
+
+ set_stmt
+ : comment K_SET uid ASSIGN expr (K_FOR comment K_TRANSACTION comment)?
+ ;
 
  expr
  : literal_value
+ | comment (SQLCODE | SQLSTATE | ACTIVITY_COUNT) comment
  | column_name
  | unary_operator expr
- | expr '||' expr
- | expr ( '*' | '/' | '%' ) expr
- | expr ( '+' | '-' ) expr
- | expr ( '<' | '<=' | '>' | '>=' ) expr
- | expr ( '=' | '==' | '!=' | '<>' | K_IS | K_IS K_NOT | K_IN | K_LIKE ) expr
+ | expr PIPE2 expr
+ | expr ( STAR | DIV | MOD ) expr
+ | expr ( PLUS | MINUS ) expr
+ | expr ( LT | LT_EQ | GT | GT_EQ ) expr
+ | expr ( ASSIGN | EQ | NOT_EQ1 | NOT_EQ2 | K_IS | K_IS comment K_NOT | K_IN | K_LIKE ) expr
  | expr K_AND expr
  | expr K_OR expr
- | function_name '(' ( K_DISTINCT? expr ( ',' expr )* | '*' )? ')'
- | '(' expr ')'
- | K_CAST '(' expr K_AS type_name ')'
- | expr K_NOT? K_LIKE  expr ( K_ESCAPE expr )?
- | expr ( K_IS K_NULL | K_IS K_NOT K_NULL | K_NOT K_NULL )
- | expr K_IS K_NOT? expr
- | expr K_NOT? K_BETWEEN expr K_AND expr
- | expr K_NOT? K_IN ( OPEN_PAR ( select_expr
-                          | expr ( ',' expr )*
+ | function_name OPEN_PAR ( (comment K_DISTINCT)? expr ( COMMA expr )* | (STAR comment) )? CLOSE_PAR comment
+ | comment OPEN_PAR expr CLOSE_PAR comment
+ | comment K_CAST comment OPEN_PAR expr K_AS type_name CLOSE_PAR comment
+ | expr (K_NOT comment)? K_LIKE expr (K_ESCAPE expr)?
+ | expr ( K_IS K_NULL | K_IS K_NOT K_NULL | K_NOT K_NULL ) comment
+ | expr K_IS (comment K_NOT)? expr
+ | expr (K_NOT comment)? K_BETWEEN expr K_AND expr
+ | expr (K_NOT comment)? K_IN ( comment OPEN_PAR ( select_expr
+                          | expr ( COMMA expr )*
                           )?
-                      CLOSE_PAR
-                    | ( database_name '.' )? table_name )
- /*| ( ( K_NOT )? K_EXISTS )? '(' select_stmt ')' */
- | K_CASE expr? ( K_WHEN expr K_THEN expr )+ ( K_ELSE expr )? K_END
+                      CLOSE_PAR comment
+                    | ( database_name DOT )? table_name )
+ /*| ( ( K_NOT )? K_EXISTS )? OPEN_PAR select_stmt CLOSE_PAR */
+ | comment K_CASE comment expr? ( K_WHEN expr K_THEN expr )+ ( K_ELSE expr )? K_END comment
  ;
 
 expr_list
- : expr (',' expr)*
+ : expr (COMMA expr)*
  ;
 
  ordinary_grouping_set
@@ -239,7 +413,7 @@ expr_list
   ;
 
  empty_grouping_set
-  : OPEN_PAR CLOSE_PAR
+  : comment OPEN_PAR comment CLOSE_PAR comment
   ;
 
  rollup_list
@@ -255,7 +429,7 @@ expr_list
   ;
 
  column_position
-  : INTEGER
+  : comment INTEGER comment
   ;
 
  subquery
@@ -271,15 +445,15 @@ expr_list
   ;
 
  column_list
-  : column_name (',' column_name)*
+  : column_name (COMMA column_name)*
   ;
 
  signed_number
-  : ( '+' | '-' )? NUMERIC_LITERAL
+  : comment ( PLUS | MINUS )? numeric_literal
   ;
 
  literal_value
-  : NUMERIC_LITERAL
+  : comment ( numeric_literal
   | STRING_LITERAL
   | K_NULL
   | K_CURRENT_TIME
@@ -287,26 +461,30 @@ expr_list
   | K_CURRENT_TIMESTAMP
   | date_expr
   | time_expr
-  | timestamp_expr
+  | timestamp_expr) comment
   ;
 
+ numeric_literal
+ : comment (INTEGER | DECIMAL | SCIENTIFIC) comment
+ ;
+
  unary_operator
-  : '-'
-  | '+'
-  | '~'
-  | K_NOT
+  : comment (MINUS
+  | PLUS
+  | TILDE
+  | K_NOT) comment
   ;
 
  column_alias
-  : IDENTIFIER
+  : comment IDENTIFIER comment
   ;
 
  query_name
-  : IDENTIFIER
+  : comment IDENTIFIER comment
   ;
 
  expr_alias_name
-  : IDENTIFIER
+  : comment IDENTIFIER comment
   ;
 
  joined_table
@@ -322,16 +500,16 @@ expr_list
   ;
 
  date_expr
-  : K_DATE? STRING_LITERAL
-  | K_DATE
+  : comment (K_DATE comment)? STRING_LITERAL comment
+  | comment K_DATE comment
   ;
 
  timestamp_expr
-  : K_TIMESTAMP? STRING_LITERAL
+  : comment (K_TIMESTAMP comment)? STRING_LITERAL comment
   ;
 
  time_expr
-  : K_TIME? STRING_LITERAL
+  : comment (K_TIME comment)? STRING_LITERAL comment
   ;
 
   date_timestamp_expr
@@ -340,7 +518,7 @@ expr_list
   ;
 
  keyword
-  :K_ABORT
+  : comment (K_ABORT
   | K_CONVERT_TABLE_HEADER
   | K_FOUND
   | K_MAX
@@ -766,7 +944,7 @@ expr_list
   | K_TIES
   | K_VALIDTIME
   | K_TRANSACTIONTIME
-  | K_BIGINT
+  | K_BIGINT) comment
 ;
 
 SCOL : ';';
@@ -1227,63 +1405,87 @@ K_LAST : L A S T;
 K_NULLS : N U L L S;
 K_ERRORS : E R R O R S;
 
+SQLSTATE : S Q L S T A T E;
+SQLCODE : S Q L C O D E;
+ACTIVITY_COUNT : A C T I V I T Y '_' C O U N T;
+
+full_uid
+ : uid DOT uid
+ ;
+
+uid
+ : comment IDENTIFIER comment
+ ;
+
 name
  : any_name
  ;
 
 function_name
- : IDENTIFIER
+ : comment IDENTIFIER comment
  | keyword /* todo: Should not do this. But some keywords are functions... a lot actually. */
  ;
 
 database_name
- : IDENTIFIER
+ : comment IDENTIFIER comment
  ;
 
 table_name
- : (database_name DOT)? IDENTIFIER
+ : comment (database_name DOT)? IDENTIFIER comment
  ;
 
 column_name
- : (table_name DOT)? IDENTIFIER
+ : comment (table_name DOT)? IDENTIFIER comment
  ;
 
 correlation_name
- : IDENTIFIER
+ : comment IDENTIFIER comment
+ ;
+
+data_type
+ : comment ((K_CHAR | K_CHARACTER | K_VARCHAR) (length_1d)? //TODO: Add charset?
+ | (K_BIGINT | K_INT | K_INTEGER | K_SMALLINT)
+ | (K_DEC | K_DECIMAL | K_DOUBLE | K_FLOAT | K_NUMERIC) (length_2d)?
+ | (K_DATE | K_TIME | K_TIMESTAMP) (length_1d)?) comment
+ ;
+
+length_1d
+ : comment OPEN_PAR comment INTEGER comment CLOSE_PAR comment
+ ;
+
+length_2d
+ : comment OPEN_PAR comment INTEGER comment COMMA comment INTEGER comment CLOSE_PAR comment
  ;
 
 type_name /* todo: this is wrong. NUM should be INTEGER... does not work for some reason. */
- : types (OPEN_PAR (STRING_LITERAL | NUMERIC_LITERAL | ',')+ CLOSE_PAR)?
+ : type (OPEN_PAR comment ((STRING_LITERAL | INTEGER | COMMA) comment)+ CLOSE_PAR)?
  ;
 
-types
- : K_DATE | K_TIME | K_TIMESTAMP | K_INTEGER | K_DEC | K_DECIMAL | K_CHAR | K_CHARACTER | K_VARCHAR
- | K_FLOAT | K_INT | K_SMALLINT | K_BIGINT | K_BLOB | K_VARBYTE | K_BYTE | K_BYTEINT | K_NUMERIC | K_DOUBLE | K_CURSOR
+type
+ : comment (K_DATE | K_TIME | K_TIMESTAMP | K_INTEGER | K_DEC | K_DECIMAL | K_CHAR | K_CHARACTER | K_VARCHAR
+ | K_FLOAT | K_INT | K_SMALLINT | K_BIGINT | K_BLOB | K_VARBYTE | K_BYTE | K_BYTEINT | K_NUMERIC | K_DOUBLE | K_CURSOR) comment
  ;
 
 any_name
- : IDENTIFIER
+ : comment (IDENTIFIER
  | keyword
  | STRING_LITERAL
- | '(' any_name ')'
+ | OPEN_PAR any_name CLOSE_PAR) comment
  ;
 
-NUMERIC_LITERAL
- : INTEGER
- | DECIMAL
- | SCIENTIFIC
- ;
+comment
+: ( SINGLE_LINE_COMMENT | MULTILINE_COMMENT )*
+;
 
 INTEGER
- : [0-9]+
- ;
+ : DIGIT+  ;
 
 DECIMAL
- : [0-9] '.' [0-9]*
+ : DIGIT+ DOT DIGIT*
  ;
 
 SCIENTIFIC
- : [0-9] E [0-9]+
+ : DIGIT E DIGIT+
  ;
 
 IDENTIFIER
@@ -1297,13 +1499,12 @@ STRING_LITERAL
  : '\'' ( ~'\'' | '\'\'' )* '\''
  ;
 
-
 SINGLE_LINE_COMMENT
- : '--' ~[\r\n]* -> channel(HIDDEN)
+ : '--' ~[\r\n]*
  ;
 
 MULTILINE_COMMENT
- : '/*' .*? ( '*/' | EOF ) -> channel(HIDDEN)
+ : '/*' .*? ( '*/' | EOF )
  ;
 
 SPACES
@@ -1313,7 +1514,7 @@ SPACES
 UNEXPECTED_CHAR
  : .
  ;
- 
+
 fragment DIGIT : [0-9];
 fragment A : [aA];
 fragment B : [bB];

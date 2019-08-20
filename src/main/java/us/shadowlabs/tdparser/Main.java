@@ -1,10 +1,5 @@
 package us.shadowlabs.tdparser;
-import org.antlr.v4.runtime.ANTLRInputStream;
-import org.antlr.v4.runtime.CommonTokenStream;
-import org.antlr.v4.runtime.tree.ParseTree;
 import org.apache.commons.cli.*;
-import us.shadowlabs.tdparser.antlr.TeradataLexer;
-import us.shadowlabs.tdparser.antlr.TeradataParser;
 
 import java.io.*;
 import java.util.Scanner;
@@ -52,21 +47,6 @@ public class Main {
         int processCount = 0;
         while (s.hasNext()) {
             processCount++;
-            String line = s.next();
-            String[] infoList = line.split("~");
-            String logDate = infoList[0];
-            String queryId = infoList[1];
-            String defaultDatabase = infoList[2];
-            String sql = infoList[3];
-            if (!sql.endsWith(";")) sql += ";";
-            try {
-                TDInfoParser parser = new TDInfoParser(logDate, queryId, defaultDatabase, sql);
-                for (ObjectTracker.ObjectInfo info : parser.getColumns()) {
-                    pw.println(logDate+"~"+queryId+"~"+defaultDatabase+"~"+info.getDatabaseName()+"~"+info.getTableName()+"~"+info.getColumnName());
-                }
-            } catch (Exception e) {
-                failCount++;
-            }
         }
         pw.close();
         s.close();
